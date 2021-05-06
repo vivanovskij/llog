@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from .models import Topic, Entry
 from .forms import TopicForm, EntryForm
+from django.http import Http404
 
 def index(request):
     """Домашняя страница приложения learning_logs"""
@@ -18,6 +19,9 @@ def topics(request):
 def topic(request, topic_slug):
     """Выводит одну тему и все её записи."""
     topic = Topic.objects.get(slug=topic_slug)
+    # Проверка того, что тема принадлежит текущему пользователю
+    if topic.owner != request.user:
+        raise Http404
     entries = topic.entry_set.order_by('-date_added')
     context = {'topic': topic, 'entries': entries}
     return render(request, 'learning_logs/topic.html', context)
@@ -32,7 +36,9 @@ def new_topic(request):
         # Отправлены данные POST; обработать данные
         form = TopicForm(data=request.POST)
         if form.is_valid():
-            form.save()
+            new_topic = form.save(commit=False)
+            new_topic.owner = request.user
+            new_topic.save()
             return redirect('learning_logs:topics')
 
     # Вывести пустую или недействительную форму
@@ -64,6 +70,8 @@ def edit_entry(request, entry_slug):
     """Редактирует существующую запись"""
     entry = Entry.objects.get(slug=entry_slug)
     topic = entry.topic
+    if topic.owner != request.user:
+        raise Http404
 
     if request.method != 'POST':
         # Исходный запрос; форма заполняется данными текущей записи
